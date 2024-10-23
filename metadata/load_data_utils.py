@@ -25,19 +25,28 @@ def remove_path_cols(df, prefix="PathName_"):
     df = df.drop(columns=filtered_columns)
     return df
 
-def generate_load_data(input_folder, ch_dic):
+def generate_load_data(input_folder, ch_dic, regex_image=r"^(?P<Well>.*)_.*_.*_(?P<Site>.*)_(?P<Channel>.*)_001.tif",
+                       regex_plate=r".*[\\/](?P<Assay>.*)[\\/](?P<Plate>.*)$", output_dir_bool=False, output_dir=None,
+                       cluster=False, cluster_img_folder=None, cluster_illum_folder=None,
+                       provide_plate_name=False, plate_name=None):
 
     illum_list = [True, False]
 
     for illum_bool in illum_list:
         df = pd.DataFrame()
-        #plate name
-        regex_plate = r".*[\\/](?P<Assay>.*)[\\/](?P<Plate>.*)$"
-        plate_search = re.search(regex_plate, input_folder)
-        platefind = plate_search.group('Plate')
-        plate = platefind.replace(" ", "_")
-        images_dir = input_folder
-        illum_dir = input_folder + r"/illum"
+        if provide_plate_name:
+            plate = plate_name
+        else:
+            regex_plate = regex_plate
+            plate_search = re.search(regex_plate, input_folder)
+            platefind = plate_search.group('Plate')
+            plate = platefind.replace(" ", "_")
+        if cluster:
+            images_dir = cluster_img_folder
+            illum_dir = cluster_illum_folder
+        else:
+            images_dir = input_folder
+            illum_dir = input_folder + r"/illum"
         #filesname and channel
         files = []
         for (dirpath, dirnames, filenames) in walk(input_folder):
@@ -45,7 +54,7 @@ def generate_load_data(input_folder, ch_dic):
             break
         #find channels
         channels = []
-        regex = r"^(?P<Well>.*)_.*_.*_(?P<Site>.*)_(?P<Channel>.*)_001.tif"
+        regex = regex_image
         for f in files:
             matches = re.search(regex, f)
             if matches:
@@ -55,6 +64,7 @@ def generate_load_data(input_folder, ch_dic):
         # check number of inputs channels == channels found
         number_of_channel_input = len(ch_dic)
         number_of_channel_regex = len(ch_unique)
+        print(ch_dic, ch_unique)
         if number_of_channel_input != number_of_channel_regex:
             print(f"WARNING: The number of channels you gave ({number_of_channel_input}) are different from the ones we found ({number_of_channel_regex}).")
         #create columns with files and pathnames
@@ -70,7 +80,7 @@ def generate_load_data(input_folder, ch_dic):
             for key,value in ch_dic.items():
                 if key in ch:
                     df["FileName_"+value] = temp_list
-                    # print(temp_list)
+                    print(temp_list)
                     df["PathName_"+value] = images_dir
                     file_width = temp_list[0]
                     path_width = images_dir
@@ -89,9 +99,12 @@ def generate_load_data(input_folder, ch_dic):
         df['Metadata_Site'] = sites
         df['Metadata_Plate'] = plate
         #save df
-        directory = "load_data_csv"
-        path = os.path.join(input_folder, directory)
-        os.makedirs(path, exist_ok=True)
+        if output_dir_bool:
+            path = output_dir
+        else:
+            directory = "load_data_csv"
+            path = os.path.join(input_folder, directory)
+            os.makedirs(path, exist_ok=True)
         if illum_bool:
             df.to_csv(path + r'\load_data_with_illum.csv', index=False)
         else:
